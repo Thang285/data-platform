@@ -1,0 +1,57 @@
+name: Deploy Data Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'src/**'
+      - 'k8s/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh/
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to VPS
+        run: |
+          # 1. Copy Files
+          scp src/jobs/orders_etl.py ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/orders_etl_${{ github.sha }}.py
+          scp k8s/spark-job.yaml ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/spark-job.yaml
+
+          # 2. Remote Execution
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+            set -e
+            echo "🔥 STARTING DEPLOYMENT..."
+            
+            # Helper Pod for MinIO Upload
+            kubectl run artifact-uploader --image=minio/mc --restart=Never --command -- sleep 600 || true
+            kubectl wait --for=condition=ready pod/artifact-uploader --timeout=60s
+            kubectl exec artifact-uploader -- mc alias set myminio http://minio.data.svc.cluster.local:9000 minioadmin minioadminpassword
+
+            # Upload Code to Data Lake (Versioning by SHA)
+            COMMIT_SHA="${{ github.sha }}"
+            REMOTE_PATH="s3a://lakehouse/code/${COMMIT_SHA}/orders_etl.py"
+            
+            kubectl cp /tmp/orders_etl_${COMMIT_SHA}.py artifact-uploader:/tmp/etl.py
+            kubectl exec artifact-uploader -- mc cp /tmp/etl.py myminio/lakehouse/code/${COMMIT_SHA}/orders_etl.py
+
+            # Update Manifest
+            sed "s|{{CODE_PATH}}|$REMOTE_PATH|g" /tmp/spark-job.yaml > /tmp/final-job.yaml
+            
+            # Apply
+            kubectl delete sparkapplication cicd-orders-job -n compute --ignore-not-found
+            kubectl apply -f /tmp/final-job.yaml
+            
+            # Cleanup
+            kubectl delete pod artifact-uploader --grace-period=0 --force
+            rm /tmp/orders_etl_*.py /tmp/spark-job.yaml /tmp/final-job.yaml
+            echo "✅ DEPLOYED!"
+          ENDSSH

@@ -1,0 +1,52 @@
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: cicd-orders-job
+  namespace: compute
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+  image: "bitnami/spark:3.5.0"
+  imagePullPolicy: IfNotPresent
+  
+  # 🎯 DYNAMIC PATH: Replaced by GitHub Action
+  mainApplicationFile: "{{CODE_PATH}}"
+  
+  sparkVersion: "3.5.0"
+  restartPolicy:
+    type: OnFailure
+    onFailureRetries: 3
+  deps:
+    packages:
+      - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0
+      - org.apache.hadoop:hadoop-aws:3.3.4
+      - com.amazonaws:aws-java-sdk-bundle:1.12.262
+  driver:
+    cores: 1
+    memory: "512m"
+    serviceAccount: spark-spark-operator-spark
+    env:
+      - name: AWS_ACCESS_KEY_ID
+        value: "minioadmin"
+      - name: AWS_SECRET_ACCESS_KEY
+        value: "minioadminpassword"
+      - name: AWS_REGION
+        value: "us-east-1"
+  executor:
+    cores: 1
+    instances: 1
+    memory: "512m"
+    env:
+      - name: AWS_ACCESS_KEY_ID
+        value: "minioadmin"
+      - name: AWS_SECRET_ACCESS_KEY
+        value: "minioadminpassword"
+  hadoopConf:
+    "fs.s3a.endpoint": "http://minio.data.svc.cluster.local:9000"
+    "fs.s3a.access.key": "minioadmin"
+    "fs.s3a.secret.key": "minioadminpassword"
+    "fs.s3a.path.style.access": "true"
+    "fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+    "fs.s3a.connection.ssl.enabled": "false"
+    "fs.s3a.aws.credentials.provider": "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider"
