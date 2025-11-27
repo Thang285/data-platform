@@ -31,31 +31,35 @@ jobs:
             set -e
             echo "🔥 STARTING DEPLOYMENT..."
             
-            # Helper Pod (Using Bitnami image which has TAR installed)
-            kubectl run artifact-uploader --image=bitnami/minio-client --restart=Never --command -- sleep 600 || true
+            # A. CRITICAL: Delete any stuck helper pods from previous runs
+            kubectl delete pod artifact-uploader --grace-period=0 --force --ignore-not-found
+            
+            # B. Start the Helper Pod (Using bitnami image which has TAR)
+            echo "⏳ Starting new uploader pod..."
+            kubectl run artifact-uploader --image=bitnami/minio-client --restart=Never --command -- sleep 600
             kubectl wait --for=condition=ready pod/artifact-uploader --timeout=60s
             
-            # Setup MinIO Creds
+            # C. Setup MinIO Creds
             kubectl exec artifact-uploader -- mc alias set myminio http://minio.data.svc.cluster.local:9000 minioadmin minioadminpassword
 
-            # Upload Code (Versioning by SHA)
+            # D. Upload Code
             COMMIT_SHA="${{ github.sha }}"
             REMOTE_PATH="s3a://lakehouse/code/${COMMIT_SHA}/orders_etl.py"
             
             echo "📦 Uploading to: $REMOTE_PATH"
-            # kubectl cp requires 'tar' to be present in the container
             kubectl cp /tmp/orders_etl_${COMMIT_SHA}.py artifact-uploader:/tmp/etl.py
             kubectl exec artifact-uploader -- mc cp /tmp/etl.py myminio/lakehouse/code/${COMMIT_SHA}/orders_etl.py
 
-            # Update Manifest
+            # E. Update Manifest
             sed "s|{{CODE_PATH}}|$REMOTE_PATH|g" /tmp/spark-job.yaml > /tmp/final-job.yaml
             
-            # Apply
+            # F. Apply Job
+            # Delete old job first to force a restart
             kubectl delete sparkapplication cicd-orders-job -n compute --ignore-not-found
             kubectl apply -f /tmp/final-job.yaml
             
             # Cleanup
             kubectl delete pod artifact-uploader --grace-period=0 --force
             rm /tmp/orders_etl_*.py /tmp/spark-job.yaml /tmp/final-job.yaml
-            echo "✅ DEPLOYED!"
+            echo "✅ DEPLOYED SUCCESSFULLY!"
           ENDSSH
