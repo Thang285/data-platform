@@ -31,15 +31,19 @@ jobs:
             set -e
             echo "🔥 STARTING DEPLOYMENT..."
             
-            # Helper Pod for MinIO Upload
-            kubectl run artifact-uploader --image=minio/mc --restart=Never --command -- sleep 600 || true
+            # Helper Pod (Using Bitnami image which has TAR installed)
+            kubectl run artifact-uploader --image=bitnami/minio-client --restart=Never --command -- sleep 600 || true
             kubectl wait --for=condition=ready pod/artifact-uploader --timeout=60s
+            
+            # Setup MinIO Creds
             kubectl exec artifact-uploader -- mc alias set myminio http://minio.data.svc.cluster.local:9000 minioadmin minioadminpassword
 
-            # Upload Code to Data Lake (Versioning by SHA)
+            # Upload Code (Versioning by SHA)
             COMMIT_SHA="${{ github.sha }}"
             REMOTE_PATH="s3a://lakehouse/code/${COMMIT_SHA}/orders_etl.py"
             
+            echo "📦 Uploading to: $REMOTE_PATH"
+            # kubectl cp requires 'tar' to be present in the container
             kubectl cp /tmp/orders_etl_${COMMIT_SHA}.py artifact-uploader:/tmp/etl.py
             kubectl exec artifact-uploader -- mc cp /tmp/etl.py myminio/lakehouse/code/${COMMIT_SHA}/orders_etl.py
 
