@@ -22,8 +22,10 @@ jobs:
 
       - name: Deploy to VPS
         run: |
-          # 1. Copy Files
-          scp src/jobs/orders_etl.py ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/orders_etl_${{ github.sha }}.py
+          # 1. Copy Files to VPS
+          # We use the Short SHA to make filenames unique
+          SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+          scp src/jobs/orders_etl.py ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/orders_etl_${SHA_SHORT}.py
           scp k8s/spark-job.yaml ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/spark-job.yaml
 
           # 2. Remote Execution
@@ -31,35 +33,37 @@ jobs:
             set -e
             echo "🔥 STARTING DEPLOYMENT..."
             
-            # A. CRITICAL: Delete any stuck helper pods from previous runs
-            kubectl delete pod artifact-uploader --grace-period=0 --force --ignore-not-found
-            
-            # B. Start the Helper Pod (Using bitnami image which has TAR)
-            echo "⏳ Starting new uploader pod..."
-            kubectl run artifact-uploader --image=bitnami/minio-client --restart=Never --command -- sleep 600
-            kubectl wait --for=condition=ready pod/artifact-uploader --timeout=60s
-            
-            # C. Setup MinIO Creds
-            kubectl exec artifact-uploader -- mc alias set myminio http://minio.data.svc.cluster.local:9000 minioadmin minioadminpassword
+            # VARIABLES
+            SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+            POD_NAME="uploader-${SHA_SHORT}"
+            REMOTE_PATH="s3a://lakehouse/code/${SHA_SHORT}/orders_etl.py"
 
-            # D. Upload Code
-            COMMIT_SHA="${{ github.sha }}"
-            REMOTE_PATH="s3a://lakehouse/code/${COMMIT_SHA}/orders_etl.py"
+            echo "🆔 Using Unique Pod Name: $POD_NAME"
+
+            # A. Start Helper Pod (Bitnami image has 'tar' installed)
+            kubectl run $POD_NAME --image=bitnami/minio-client --restart=Never --command -- sleep 600
+            echo "⏳ Waiting for pod to be ready..."
+            kubectl wait --for=condition=ready pod/$POD_NAME --timeout=60s
             
+            # B. Setup MinIO Creds
+            kubectl exec $POD_NAME -- mc alias set myminio http://minio.data.svc.cluster.local:9000 minioadmin minioadminpassword
+
+            # C. Upload Code
             echo "📦 Uploading to: $REMOTE_PATH"
-            kubectl cp /tmp/orders_etl_${COMMIT_SHA}.py artifact-uploader:/tmp/etl.py
-            kubectl exec artifact-uploader -- mc cp /tmp/etl.py myminio/lakehouse/code/${COMMIT_SHA}/orders_etl.py
+            kubectl cp /tmp/orders_etl_${SHA_SHORT}.py $POD_NAME:/tmp/etl.py
+            kubectl exec $POD_NAME -- mc cp /tmp/etl.py myminio/lakehouse/code/${SHA_SHORT}/orders_etl.py
 
-            # E. Update Manifest
+            # D. Update Manifest
             sed "s|{{CODE_PATH}}|$REMOTE_PATH|g" /tmp/spark-job.yaml > /tmp/final-job.yaml
             
-            # F. Apply Job
-            # Delete old job first to force a restart
+            # E. Apply Job (Delete old one first)
             kubectl delete sparkapplication cicd-orders-job -n compute --ignore-not-found
             kubectl apply -f /tmp/final-job.yaml
             
-            # Cleanup
-            kubectl delete pod artifact-uploader --grace-period=0 --force
+            # F. Cleanup
+            echo "🧹 Cleaning up..."
+            kubectl delete pod $POD_NAME --grace-period=0 --force
             rm /tmp/orders_etl_*.py /tmp/spark-job.yaml /tmp/final-job.yaml
-            echo "✅ DEPLOYED SUCCESSFULLY!"
+            
+            echo "✅ DEPLOYMENT COMPLETE!"
           ENDSSH
