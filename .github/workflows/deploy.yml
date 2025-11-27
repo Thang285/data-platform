@@ -13,6 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      # 1. Setup SSH Connection
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh/
@@ -20,15 +21,17 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy to VPS
+      # 2. Copy Files to VPS (/tmp folder)
+      - name: Copy Files to VPS
         run: |
-          # 1. Copy Files to VPS
-          # We use the Short SHA to make filenames unique
+          # Create a Short SHA for versioning
           SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
           scp src/jobs/orders_etl.py ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/orders_etl_${SHA_SHORT}.py
           scp k8s/spark-job.yaml ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/spark-job.yaml
 
-          # 2. Remote Execution
+      # 3. Remote Execution on VPS
+      - name: Deploy on Kubernetes
+        run: |
           ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
             set -e
             echo "🔥 STARTING DEPLOYMENT..."
@@ -38,25 +41,34 @@ jobs:
             POD_NAME="uploader-${SHA_SHORT}"
             REMOTE_PATH="s3a://lakehouse/code/${SHA_SHORT}/orders_etl.py"
 
-            echo "🆔 Using Unique Pod Name: $POD_NAME"
+            echo "🆔 Unique Pod Name: $POD_NAME"
 
-            # A. Start Helper Pod (Bitnami image has 'tar' installed)
-            kubectl run $POD_NAME --image=bitnami/minio-client --restart=Never --command -- sleep 600
-            echo "⏳ Waiting for pod to be ready..."
-            kubectl wait --for=condition=ready pod/$POD_NAME --timeout=60s
+            # A. Start Helper Pod 
+            # FIX: Use Amazon ECR to avoid Docker Hub limits
+            # FIX: Use 'bitnami/minio-client' because it contains 'tar' (required for kubectl cp)
+            kubectl run $POD_NAME \
+              --image=public.ecr.aws/bitnami/minio-client:latest \
+              --image-pull-policy=IfNotPresent \
+              --restart=Never \
+              --command -- sleep 600
             
-            # B. Setup MinIO Creds
+            echo "⏳ Waiting for helper pod..."
+            kubectl wait --for=condition=ready pod/$POD_NAME --timeout=120s
+            
+            # B. Setup MinIO Credentials inside the pod
             kubectl exec $POD_NAME -- mc alias set myminio http://minio.data.svc.cluster.local:9000 minioadmin minioadminpassword
 
-            # C. Upload Code
-            echo "📦 Uploading to: $REMOTE_PATH"
+            # C. Upload Code (VPS -> Pod -> MinIO)
+            echo "📦 Uploading code to: $REMOTE_PATH"
             kubectl cp /tmp/orders_etl_${SHA_SHORT}.py $POD_NAME:/tmp/etl.py
             kubectl exec $POD_NAME -- mc cp /tmp/etl.py myminio/lakehouse/code/${SHA_SHORT}/orders_etl.py
 
-            # D. Update Manifest
+            # D. Update Kubernetes Manifest
+            # Inject the MinIO URL into the template
             sed "s|{{CODE_PATH}}|$REMOTE_PATH|g" /tmp/spark-job.yaml > /tmp/final-job.yaml
             
-            # E. Apply Job (Delete old one first)
+            # E. Apply Job
+            # Delete old job first to force a restart
             kubectl delete sparkapplication cicd-orders-job -n compute --ignore-not-found
             kubectl apply -f /tmp/final-job.yaml
             

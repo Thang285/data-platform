@@ -10,7 +10,7 @@ spec:
   image: "bitnami/spark:3.5.0"
   imagePullPolicy: IfNotPresent
   
-  # 🎯 DYNAMIC PATH: Replaced by GitHub Action
+  # 🎯 DYNAMIC PATH: This gets replaced by the GitHub Action
   mainApplicationFile: "{{CODE_PATH}}"
   
   sparkVersion: "3.5.0"
