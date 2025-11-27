@@ -41,7 +41,7 @@ jobs:
             POD_NAME="uploader-${SHA_SHORT}"
             REMOTE_PATH="s3a://lakehouse/code/${SHA_SHORT}/orders_etl.py"
 
-            echo "🆔 Unique Pod Name: $POD_NAME"
+            echo "Unique Pod Name: $POD_NAME"
 
             # A. Start Helper Pod 
             # FIX: Use Amazon ECR to avoid Docker Hub limits
@@ -52,11 +52,14 @@ jobs:
               --restart=Never \
               --command -- sleep 600
             
-            echo "⏳ Waiting for helper pod..."
+            echo "Waiting for helper pod..."
             kubectl wait --for=condition=ready pod/$POD_NAME --timeout=120s
             
             # B. Setup MinIO Credentials inside the pod
             kubectl exec $POD_NAME -- mc alias set myminio http://minio.data.svc.cluster.local:9000 minioadmin minioadminpassword
+
+            echo "🪣 Ensuring bucket 'lakehouse' exists..."
+            kubectl exec $POD_NAME -- mc mb myminio/lakehouse --ignore-existing
 
             # C. Upload Code (VPS -> Pod -> MinIO)
             echo "📦 Uploading code to: $REMOTE_PATH"
