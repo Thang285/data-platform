@@ -7,7 +7,6 @@ spec:
   type: Python
   pythonVersion: "3"
   mode: cluster
-  # Use the specific ECR image to avoid rate limits
   image: "public.ecr.aws/bitnami/spark:3.5.1-debian-12-r11"
   imagePullPolicy: IfNotPresent
   mainApplicationFile: "{{CODE_PATH}}"
@@ -16,9 +15,11 @@ spec:
     type: OnFailure
     onFailureRetries: 3
 
-  # ⚡ CRITICAL FIX 1: Move cache to /tmp (Just in case)
+  # ⚡ FIX 1: Point Cache to the Safe Volume
   sparkConf:
-    "spark.jars.ivy": "/tmp/.ivy2"
+    "spark.jars.ivy": "/home/spark/.ivy2"
+    "spark.driver.memoryOverhead": "128m"
+    "spark.executor.memoryOverhead": "128m"
 
   deps:
     packages:
@@ -29,11 +30,10 @@ spec:
   # ⚙️ DRIVER CONFIG
   driver:
     cores: 1
+    coreLimit: "250m"
     memory: "512m"
     serviceAccount: spark-spark-operator-spark
-    # ⚡ CRITICAL FIX 2: Run as Root (Bypasses all permission errors)
-    securityContext:
-      runAsUser: 0
+    securityContext: { runAsUser: 0 }
     env:
       - name: AWS_ACCESS_KEY_ID
         value: "minioadmin"
@@ -41,20 +41,32 @@ spec:
         value: "minioadminpassword"
       - name: AWS_REGION
         value: "us-east-1"
-  
+    # ⚡ FIX 2: Mount to the specific cache folder (Not /tmp)
+    volumeMounts:
+      - name: ivy-cache
+        mountPath: /home/spark/.ivy2
+
   # ⚙️ EXECUTOR CONFIG
   executor:
     cores: 1
+    coreLimit: "250m"
     instances: 1
     memory: "512m"
-    # ⚡ CRITICAL FIX 2: Run as Root
-    securityContext:
-      runAsUser: 0
+    securityContext: { runAsUser: 0 }
     env:
       - name: AWS_ACCESS_KEY_ID
         value: "minioadmin"
       - name: AWS_SECRET_ACCESS_KEY
         value: "minioadminpassword"
+    # ⚡ FIX 2: Mount to the specific cache folder
+    volumeMounts:
+      - name: ivy-cache
+        mountPath: /home/spark/.ivy2
+
+  # 🔌 VOLUME DEFINITION
+  volumes:
+    - name: ivy-cache
+      emptyDir: {}
 
   # HADOOP CONFIG
   hadoopConf:
