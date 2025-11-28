@@ -16,7 +16,6 @@ spec:
     onFailureRetries: 3
 
   # ⚡ FIX: Use native /tmp (No volumes attached)
-  # This folder is naturally writable by all users
   sparkConf:
     "spark.jars.ivy": "/tmp/.ivy2"
     "spark.driver.memoryOverhead": "128m"
@@ -31,7 +30,7 @@ spec:
   # ⚙️ DRIVER CONFIG
   driver:
     cores: 1
-    coreLimit: "250m"
+    coreLimit: "1200m"  # <--- UPDATED: Must be >= cores (1)
     memory: "512m"
     serviceAccount: spark-spark-operator-spark
     # Run Driver as Root to handle internal logic
@@ -48,7 +47,7 @@ spec:
   # ⚙️ EXECUTOR CONFIG
   executor:
     cores: 1
-    coreLimit: "250m"
+    coreLimit: "1200m"  # <--- UPDATED: Must be >= cores (1)
     instances: 1
     memory: "512m"
     securityContext:
