@@ -4,7 +4,7 @@ from pyspark.sql.functions import from_json, col
 from pyspark.sql.types import StructType, StringType, DoubleType, IntegerType
 
 def main():
-    print("CI/CD SPARK JOB STARTED............")
+    print("CI/CD SPARK JOB STARTED.....")
     
     spark = SparkSession.builder.appName("CICD_Orders_ETL").getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
