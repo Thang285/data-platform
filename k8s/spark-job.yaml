@@ -17,6 +17,7 @@ spec:
 
   # ⚡ FIX: Use native /tmp (No volumes attached)
   sparkConf:
+    "spark.kubernetes.executor.deleteOnTermination": "false"
     "spark.jars.ivy": "/tmp/.ivy2"
     "spark.driver.memoryOverhead": "128m"
     "spark.executor.memoryOverhead": "128m"
