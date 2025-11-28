@@ -35,8 +35,6 @@ spec:
     memory: "512m"
     serviceAccount: spark-spark-operator-spark
     # Run Driver as Root to handle internal logic
-    securityContext:
-      runAsUser: 0
     env:
       - name: AWS_ACCESS_KEY_ID
         value: "minioadmin"
@@ -51,8 +49,6 @@ spec:
     coreLimit: "1200m"  # <--- UPDATED: Must be >= cores (1)
     instances: 1
     memory: "512m"
-    securityContext:
-      runAsUser: 0
     env:
       - name: AWS_ACCESS_KEY_ID
         value: "minioadmin"
