@@ -15,9 +15,10 @@ spec:
     type: OnFailure
     onFailureRetries: 3
 
-  # ⚡ FIX 1: Point Cache to the Safe Volume
+  # ⚡ FIX: Use native /tmp (No volumes attached)
+  # This folder is naturally writable by all users
   sparkConf:
-    "spark.jars.ivy": "/home/spark/.ivy2"
+    "spark.jars.ivy": "/tmp/.ivy2"
     "spark.driver.memoryOverhead": "128m"
     "spark.executor.memoryOverhead": "128m"
 
@@ -33,7 +34,9 @@ spec:
     coreLimit: "250m"
     memory: "512m"
     serviceAccount: spark-spark-operator-spark
-    securityContext: { runAsUser: 0 }
+    # Run Driver as Root to handle internal logic
+    securityContext:
+      runAsUser: 0
     env:
       - name: AWS_ACCESS_KEY_ID
         value: "minioadmin"
@@ -41,32 +44,20 @@ spec:
         value: "minioadminpassword"
       - name: AWS_REGION
         value: "us-east-1"
-    # ⚡ FIX 2: Mount to the specific cache folder (Not /tmp)
-    volumeMounts:
-      - name: ivy-cache
-        mountPath: /home/spark/.ivy2
-
+  
   # ⚙️ EXECUTOR CONFIG
   executor:
     cores: 1
     coreLimit: "250m"
     instances: 1
     memory: "512m"
-    securityContext: { runAsUser: 0 }
+    securityContext:
+      runAsUser: 0
     env:
       - name: AWS_ACCESS_KEY_ID
         value: "minioadmin"
       - name: AWS_SECRET_ACCESS_KEY
         value: "minioadminpassword"
-    # ⚡ FIX 2: Mount to the specific cache folder
-    volumeMounts:
-      - name: ivy-cache
-        mountPath: /home/spark/.ivy2
-
-  # 🔌 VOLUME DEFINITION
-  volumes:
-    - name: ivy-cache
-      emptyDir: {}
 
   # HADOOP CONFIG
   hadoopConf:
