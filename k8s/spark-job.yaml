@@ -7,6 +7,7 @@ spec:
   type: Python
   pythonVersion: "3"
   mode: cluster
+  # Use the specific ECR image to avoid rate limits
   image: "public.ecr.aws/bitnami/spark:3.5.1-debian-12-r11"
   imagePullPolicy: IfNotPresent
   mainApplicationFile: "{{CODE_PATH}}"
@@ -15,12 +16,10 @@ spec:
     type: OnFailure
     onFailureRetries: 3
 
-  # ⚡ CRITICAL FIX: Force Spark to download JARs to /tmp
-  # This fixes the "FileNotFoundException" during submission
+  # ⚡ CRITICAL FIX 1: Move cache to /tmp (Just in case)
   sparkConf:
     "spark.jars.ivy": "/tmp/.ivy2"
 
-  # 📦 DEPENDENCIES
   deps:
     packages:
       - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1
@@ -32,6 +31,9 @@ spec:
     cores: 1
     memory: "512m"
     serviceAccount: spark-spark-operator-spark
+    # ⚡ CRITICAL FIX 2: Run as Root (Bypasses all permission errors)
+    securityContext:
+      runAsUser: 0
     env:
       - name: AWS_ACCESS_KEY_ID
         value: "minioadmin"
@@ -45,6 +47,9 @@ spec:
     cores: 1
     instances: 1
     memory: "512m"
+    # ⚡ CRITICAL FIX 2: Run as Root
+    securityContext:
+      runAsUser: 0
     env:
       - name: AWS_ACCESS_KEY_ID
         value: "minioadmin"
