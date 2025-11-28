@@ -7,10 +7,10 @@ spec:
   type: Python
   pythonVersion: "3"
   mode: cluster
-  image: "bitnami/spark:3.5.0"
+  image: "public.ecr.aws/bitnami/spark:3.5.1-debian-12-r11"
   imagePullPolicy: IfNotPresent
   mainApplicationFile: "{{CODE_PATH}}"
-  sparkVersion: "3.5.0"
+  sparkVersion: "3.5.1"
   restartPolicy:
     type: OnFailure
     onFailureRetries: 3
@@ -23,7 +23,7 @@ spec:
   # 📦 DEPENDENCIES
   deps:
     packages:
-      - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0
+      - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1
       - org.apache.hadoop:hadoop-aws:3.3.4
       - com.amazonaws:aws-java-sdk-bundle:1.12.262
 
