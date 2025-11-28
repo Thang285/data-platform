@@ -15,6 +15,11 @@ spec:
     type: OnFailure
     onFailureRetries: 3
 
+  # ⚡ CRITICAL FIX: Force Spark to download JARs to /tmp
+  # This fixes the "FileNotFoundException" during submission
+  sparkConf:
+    "spark.jars.ivy": "/tmp/.ivy2"
+
   # 📦 DEPENDENCIES
   deps:
     packages:
@@ -22,7 +27,7 @@ spec:
       - org.apache.hadoop:hadoop-aws:3.3.4
       - com.amazonaws:aws-java-sdk-bundle:1.12.262
 
-  # ⚙️ DRIVER CONFIG (With IVY FIX)
+  # ⚙️ DRIVER CONFIG
   driver:
     cores: 1
     memory: "512m"
@@ -34,12 +39,8 @@ spec:
         value: "minioadminpassword"
       - name: AWS_REGION
         value: "us-east-1"
-    # FIX: Mount a writable volume for the Ivy Cache
-    volumeMounts:
-      - name: ivy-cache
-        mountPath: /home/spark/.ivy2
   
-  # ⚙️ EXECUTOR CONFIG (With IVY FIX)
+  # ⚙️ EXECUTOR CONFIG
   executor:
     cores: 1
     instances: 1
@@ -49,14 +50,6 @@ spec:
         value: "minioadmin"
       - name: AWS_SECRET_ACCESS_KEY
         value: "minioadminpassword"
-    volumeMounts:
-      - name: ivy-cache
-        mountPath: /home/spark/.ivy2
-
-  # 🔌 VOLUME DEFINITION
-  volumes:
-    - name: ivy-cache
-      emptyDir: {}
 
   # HADOOP CONFIG
   hadoopConf:
