@@ -32,7 +32,7 @@ spec:
   driver:
     cores: 1
     coreLimit: "1200m"  # <--- UPDATED: Must be >= cores (1)
-    memory: "512m"
+    memory: "1024m"
     serviceAccount: spark-spark-operator-spark
     # Run Driver as Root to handle internal logic
     env:
