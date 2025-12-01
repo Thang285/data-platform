@@ -3,3 +3,5 @@ __pycache__/
 .DS_Store
 .env
 .venv/
+airflow_key
+airflow_key.pub
