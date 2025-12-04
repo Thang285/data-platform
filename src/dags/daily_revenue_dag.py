@@ -86,7 +86,7 @@ with DAG(
     'daily_revenue_report',
     default_args=default_args,
     description='Calculates daily revenue from MinIO Parquet files',
-    schedule_interval='@daily',
+    schedule='@daily',
     start_date=datetime(2024, 1, 1), # Fixed date instead of dynamic days_ago
     catchup=False
 ) as dag:
