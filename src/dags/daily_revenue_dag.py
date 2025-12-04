@@ -1,7 +1,6 @@
 from airflow import DAG
 from airflow.providers.cncf.kubernetes.operators.spark_kubernetes import SparkKubernetesOperator
-from airflow.utils.dates import days_ago
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 default_args = {
     'owner': 'data-team',
@@ -88,7 +87,7 @@ with DAG(
     default_args=default_args,
     description='Calculates daily revenue from MinIO Parquet files',
     schedule_interval='@daily',
-    start_date=days_ago(1),
+    start_date=datetime(2024, 1, 1), # Fixed date instead of dynamic days_ago
     catchup=False
 ) as dag:
 
